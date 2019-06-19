@@ -4,6 +4,7 @@ import "time"
 
 //MONGODB_NAME
 const MONGODB_NAME = "testdb"
+const MONGODB_Collection = "testcollection"
 
 //mongo timeout hours
 const MONGOMAXTIMEOUTHOURS = 6
@@ -13,6 +14,7 @@ const NEWTANLENAME = "devices"
 
 var DMMongoDbAddress = "mongo://127.0.0.1:27017"
 
+var pgType = "postgre"
 var pgUser = "postgre"
 var pgPwd = "postgre"
 var pgIp = "127.0.0.1"

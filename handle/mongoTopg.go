@@ -9,6 +9,9 @@ import (
 
 	"github.com/robfig/cron"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 func TestExec() {
@@ -27,14 +30,25 @@ func MongoDBToCSV(skip uint, limit uint, csvName string) {
 		fmt.Printf("Execute Shell:%s failed with error:%s", command, err.Error())
 		return
 	}
-	//logging.Info("Execute Shell:%s finished with output:\n%s", command, string(output))
+	fmt.Printf("Execute Shell:%s finished with output:\n%s", command, string(output))
 }
 
 func GetDeviceInfoCount() uint {
-	coll := DMGetCollection("insight", "DeviceInfo")
+	//coll := DMGetCollection("insight", "DeviceInfo")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cs := "mongodb://192.168.1.80:27017"
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cs))
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = client.Ping(ctx, readpref.Primary())
+	dbname := client.Database(MONGODB_NAME)
+	coll := dbname.Collection(MONGODB_Collection) 
+
 	count, err := coll.CountDocuments(context.Background(), bson.D{})
 	if err != nil {
-		fmt.Printf("coll.CountDocuments err : ", err)
+		fmt.Println("coll.CountDocuments err : ", err)
 		return 0
 	}
 	return uint(count)
@@ -82,7 +96,7 @@ func MongoDBToPostgreHandle() {
 }
 
 func CSVToPostgre(csvName []string) {
-	db := pg.GetDB()
+	db := GetDB()
 	if db == nil {
 		fmt.Printf("db == nil. ")
 		return
@@ -91,16 +105,15 @@ func CSVToPostgre(csvName []string) {
 	sqlstr := "TRUNCATE " + TABLENAME + ";"
 	_, err := db.Exec(sqlstr)
 	if err != nil {
-		fmt.Printf("SQL fail, : ", sqlstr)
+		fmt.Println("SQL fail, : ", sqlstr)
 	}
 	//import
 	for i := 0; i < len(csvName); i++ {
 		// shell psql import to postgresql.
-		tmphost := strings.Split(setting.PgHost, ":")
-		host := tmphost[0]
-		port := tmphost[1]
+		host := pgIp
+		port := pgPort
 		command := fmt.Sprintf(`export PGIP="%v";export PGPORT=%v;export PGUSER="%v";export PGPASSWORD="%v";export TABLENAME="%v";export FILENAME="%v";./bin/csvimportpg.sh`,
-			host, port, setting.PgUser, setting.PgPassword, TABLENAME, csvName[i])
+			host, port, pgUser, pgPwd, pgDbName, csvName[i])
 
 		cmd := exec.Command("/bin/bash", "-c", command)
 		output, err := cmd.Output()
@@ -110,18 +123,12 @@ func CSVToPostgre(csvName []string) {
 		}
 		fmt.Printf("Execute Shell:%s finished with output:\n%s", command, string(output))
 	}
-	// Conv data.
-	sqlstr = fmt.Sprintf("update %v set type='hgu' where type='3';update %v set type='ihgu' where type='6';update %v set type='stb' where type='7';",
-		TABLENAME, TABLENAME, TABLENAME)
-	_, err = db.Exec(sqlstr)
-	if err != nil {
-		fmt.Printf("SQL fail, : ", sqlstr)
-	}
+	// other handle.
 
 	// tx begin.
 	tx, err := db.Begin()
 	if err != nil {
-		fmt.Printf(err)
+		fmt.Println(err)
 	}
 	// rename NEW -> NEW_1122
 	var OldName = TABLENAME
@@ -129,23 +136,23 @@ func CSVToPostgre(csvName []string) {
 	sqlstr = "alter table " + NewName + " rename to " + NewName + "_1122" + ";"
 	_, err = tx.Exec(sqlstr)
 	if err != nil {
-		fmt.Printf("SQL INSTER fail, : ", sqlstr)
+		fmt.Println("SQL INSTER fail, : ", sqlstr)
 	}
 	// rename OLD -> NEW
 	sqlstr = "alter table " + OldName + " rename to " + NewName + ";"
 	_, err = tx.Exec(sqlstr)
 	if err != nil {
-		fmt.Printf("SQL INSTER fail, : ", sqlstr)
+		fmt.Println("SQL INSTER fail, : ", sqlstr)
 	}
 	// rename NEW_1122 -> OLD
 	sqlstr = "alter table " + NewName + "_1122" + " rename to " + OldName + ";"
 	_, err = tx.Exec(sqlstr)
 	if err != nil {
-		fmt.Printf("SQL INSTER fail, : ", sqlstr)
+		fmt.Println("SQL INSTER fail, : ", sqlstr)
 	}
 	if err := tx.Commit(); err != nil {
 		tx.Rollback()
-		fmt.Printf(err)
+		fmt.Println(err)
 		return
 	}
 }

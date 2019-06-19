@@ -1,4 +1,4 @@
-package pg
+package handle
 
 import (
 	"database/sql"
@@ -24,11 +24,11 @@ var mysqlinsightcfgdb *gorm.DB
 //Setup models Setup init.
 func Setup() {
 	var err error
-	dbType := setting.PgType
-	dbName := setting.PgDBName
-	user := setting.PgUser
-	password := setting.PgPassword
-	host := setting.PgHost
+	dbType := pgType
+	dbName := pgDbName
+	user := pgUser
+	password := pgPwd
+	host := fmt.Sprintf("%s:%d",pgIp,pgPort)
 	connStr := "postgres://%s:%s@%s/%s?sslmode=disable"
 	connStr = fmt.Sprintf(connStr, user, password, host, dbName)
 	log.Println(connStr)
